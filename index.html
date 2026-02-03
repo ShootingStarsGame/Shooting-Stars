@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shooting Stars | Arcade Action</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22>🚀</text></svg>">
+
+    <style>
+        body { 
+            background: #0b0b0b; 
+            color: white; 
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden; 
+            user-select: none;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 600px;
+            height: 400px;
+            box-shadow: 0 0 50px rgba(0,230,118,0.2);
+            border: 4px solid #444;
+            background: #000;
+        }
+
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* UI OVERLAYS */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(10, 10, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .hidden { display: none !important; }
+
+        /* BUTTONS */
+        .mode-container { display: flex; gap: 10px; margin-bottom: 20px; }
+
+        button {
+            background: #222;
+            color: white;
+            border: 2px solid #444;
+            padding: 12px 10px;
+            font-size: 14px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: 0.1s;
+            min-width: 110px;
+            text-transform: uppercase;
+            font-weight: bold;
+            box-shadow: 0 4px 0 #000;
+        }
+        
+        button:active { transform: translateY(4px); box-shadow: 0 0 0 #000; }
+        button:hover { background: #333; border-color: #00E676; }
+        
+        .btn-easy { border-bottom: 4px solid #00E676; }
+        .btn-med { border-bottom: 4px solid #FFEB3B; }
+        .btn-hard { border-bottom: 4px solid #F44336; }
+        .btn-chal { border-bottom: 4px solid #9C27B0; min-width: 120px; }
+        
+        .btn-shop { background: #E91E63; border: 2px solid #C2185B; width: 100%; margin-top: 5px; }
+        .btn-cat { width: 140px; height: 100px; margin: 5px; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+        .btn-back { background: #444; margin-top: 10px; width: 200px; }
+
+        /* HUD */
+        #ui { 
+            width: 600px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0px #000;
+        }
+        #coinDisplay { color: #FFD700; }
+
+        /* SHOP STYLING */
+        #shopContent {
+            width: 90%;
+            height: 65%;
+            overflow-y: auto;
+            border: 1px solid #333;
+            background: #111;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-content: flex-start;
+        }
+        
+        .shop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+        .skin-card { background: #1e1e1e; border: 1px solid #333; padding: 5px; text-align: center; display: flex; flex-direction: column; align-items: center; border-radius: 4px; }
+        .skin-preview { width: 30px; height: 30px; margin-bottom: 5px; background: #000; border: 1px solid #444; }
+        .skin-name { font-size: 9px; margin-bottom: 2px; color: #ccc; }
+        .cost-text { font-size: 9px; color: #FFD700; margin-bottom: 5px; }
+        .btn-buy { width: 100%; font-size: 9px; padding: 4px; min-width: auto; height: auto; box-shadow: none; border-bottom-width: 2px;}
+
+        /* NOTIFICATIONS */
+        #countdownText { font-size: 80px; font-weight: bold; color: #00E676; text-shadow: 0 0 20px #00E676; }
+        #challengeNotify {
+            position: absolute; top: 50px; width: 100%; text-align: center; color: #9C27B0;
+            font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #fff; opacity: 0; transition: opacity 0.5s; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <span id="scoreLabel">Score: 0</span>
+        <span id="coinDisplay">Coins: 0</span>
+    </div>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+        <div id="challengeNotify">DIFFICULTY UP! +10 COINS</div>
+
+        <div id="menuOverlay" class="overlay">
+            <h1 style="margin: 0 0 5px 0; color: white; font-size: 32px; text-shadow: 0 0 15px #00E676;">SHOOTING STARS</h1>
+            <p id="menuHighscore" style="color: #888; margin-bottom: 25px; font-size: 14px;">High Score: 0</p>
+            
+            <div class="mode-container">
+                <button class="btn-easy" onclick="initGameSequence('easy')">EASY<br><span style="font-size:10px; color:#aaa;">(2 Coins)</span></button>
+                <button class="btn-med" onclick="initGameSequence('medium')">MEDIUM<br><span style="font-size:10px; color:#aaa;">(4 Coins)</span></button>
+                <button class="btn-hard" onclick="initGameSequence('hard')">HARD<br><span style="font-size:10px; color:#aaa;">(6 Coins)</span></button>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <button class="btn-chal" onclick="initGameSequence('challenge')">CHALLENGE<br><span style="font-size:10px; color:#aaa;">(Scale Up)</span></button>
+            </div>
+
+            <div style="width: 350px;">
+                <button class="btn-shop" onclick="openShopRoot()">SKIN SHOP</button>
+            </div>
+        </div>
+
+        <div id="countdownOverlay" class="overlay hidden">
+            <div style="font-size: 20px; color: #aaa;">READY...</div>
+            <div id="countdownText">3</div>
+        </div>
+
+        <div id="pauseOverlay" class="overlay hidden">
+            <h1 style="color: #FFEB3B;">PAUSED</h1>
+            <button onclick="togglePause()">RESUME</button>
+            <button class="btn-back" onclick="quitGame()">QUIT TO MENU</button>
+        </div>
+
+        <div id="shopOverlay" class="overlay hidden">
+            <h2 id="shopTitle" style="color: #E91E63; margin-top:0;">SHOP CATEGORIES</h2>
+            <p id="shopCoins" style="color: #FFD700; margin: 0 0 10px 0;">Coins: 0</p>
+            <div id="shopContent"></div>
+            <button id="shopBackBtn" class="btn-back" onclick="closeShop()">BACK TO MENU</button>
+        </div>
+
+        <div id="gameOverOverlay" class="overlay hidden">
+            <h1 style="color: #F44336; font-size: 40px;">GAME OVER</h1>
+            <p id="finalScore" style="color: #fff; font-size: 24px;">Score: 0</p>
+            <p id="coinsEarned" style="color: #FFD700; margin-bottom: 30px; font-size: 20px;">Coins Earned: +0</p>
+            <button class="btn-back" onclick="goToMainMenu()">MAIN MENU</button>
+        </div>
+    </div>
+    
+    <div style="margin-top: 15px; color: #777; font-size: 13px;">
+        <span style="color: #00E676;">ARROWS</span> to Move | <span style="color: #00E676;">SPACE</span> to Shoot | <span style="color: #00E676;">ESC</span> to Pause
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const ui = {
+        score: document.getElementById('scoreLabel'),
+        coins: document.getElementById('coinDisplay'),
+        menu: document.getElementById('menuOverlay'),
+        shop: document.getElementById('shopOverlay'),
+        gameOver: document.getElementById('gameOverOverlay'),
+        countdown: document.getElementById('countdownOverlay'),
+        pause: document.getElementById('pauseOverlay'),
+        highscore: document.getElementById('menuHighscore'),
+        countText: document.getElementById('countdownText'),
+        shopContent: document.getElementById('shopContent'),
+        shopTitle: document.getElementById('shopTitle'),
+        shopBackBtn: document.getElementById('shopBackBtn'),
+        shopCoins: document.getElementById('shopCoins'),
+        notify: document.getElementById('challengeNotify')
+    };
+
+    let savedData = JSON.parse(localStorage.getItem('sportsShooterSave')) || {
+        highScore: 0, coins: 0, ownedSkins: ['classic'], equippedSkin: 'classic'
+    };
+
+    function saveData() {
+        localStorage.setItem('sportsShooterSave', JSON.stringify(savedData));
+        updateHUD();
+    }
+
+    const SKINS = [
+        { id: 'j_chi', name: 'Chicago Bulls', cat: 'basketball', type: 'jersey', c1: '#CE1141', c2: '#000000', cost: 150 },
+        { id: 'j_fin', name: 'Finn Hachey', cat: 'basketball', type: 'jersey', c1: '#d3d3d3', c2: '#ffffff', cost: 150 },
+        { id: 'j_okc', name: 'OKC Thunder', cat: 'basketball', type: 'jersey', c1: '#007AC1', c2: '#ef3b24', cost: 150 },
+        { id: 'j_ren', name: 'Elliot Ren', cat: 'basketball', type: 'jersey', c1: '#000000', c2: '#008000', cost: 100000 },
+        { id: 'j_la',  name: 'L.A. Lakers',   cat: 'basketball', type: 'jersey', c1: '#FDB927', c2: '#552583', cost: 150 },
+        { id: 'j_bos', name: 'Boston Celtics',  cat: 'basketball', type: 'jersey', c1: '#007A33', c2: '#FFFFFF', cost: 150 },
+        { id: 'j_gsw', name: 'Golden State',   cat: 'basketball', type: 'jersey', c1: '#1D428A', c2: '#FFC72C', cost: 150 },
+        { id: 'j_mia', name: 'Miami Heat',   cat: 'basketball', type: 'jersey', c1: '#7EC8E3', c2: '#FB70BC', cost: 150 },
+        { id: 'j_ny',  name: 'N.Y.K.', cat: 'basketball', type: 'jersey', c1: '#F58426', c2: '#006BB6', cost: 150 },
+        { id: 'j_sas', name: 'San Antonio Spurs', cat: 'basketball', type: 'jersey', c1: '#C4CED4', c2: '#000000', cost: 150 },
+        { id: 'j_phi', name: 'Philly',  cat: 'basketball', type: 'jersey', c1: '#006BB6', c2: '#ED174C', cost: 150},
+        { id: 's_mad', name: 'Real Madrid',    cat: 'soccer', type: 'jersey', c1: '#FFFFFF', c2: '#FEBE10', cost: 150 },
+        { id: 's_bar', name: 'Barcelona ',   cat: 'soccer', type: 'jersey',  c1: '#004D98', c2: '#A50044', cost: 150 },
+        { id: 's_man', name: 'Man U',  cat: 'soccer', type: 'jersey', c1: '#DA291C', c2: '#FFFFFF', cost: 150 },
+        { id: 's_liv', name: 'Liverpool',       cat: 'soccer', type: 'jersey',  c1: '#FFFFFF', c2: '#3DED97', cost: 150 },
+        { id: 's_che', name: 'Inter Milan',    cat: 'soccer', type: 'jersey',  c1: '#034694', c2: null,       cost: 150 },
+        { id: 's_juv', name: 'Juventus',    cat: 'soccer', type: 'jersey', c1: '#000000', c2: '#FFFFFF', cost: 150 },
+        { id: 's_psg', name: 'Paris',   cat: 'soccer', type: 'jersey', c1: '#004170', c2: '#DA291C', cost: 150 },
+        { id: 's_bay', name: 'Bayern Munich',   cat: 'soccer', type: 'jersey',  c1: '#DC052D', c2: '#FFFFFF',       cost: 150 },
+        { id: 'b_nyy', name: 'NY Yankees',       cat: 'baseball', type: 'jersey', c1: '#FFFFFF', c2: '#003087', cost: 120 },
+        { id: 'b_bos', name: 'Bos Red Socks',       cat: 'baseball', type: 'jersey', c1: '#BD3039', c2: '#FFFFFF', cost: 120 },
+        { id: 'b_lad', name: 'LA Dodgers',       cat: 'baseball', type: 'jersey', c1: '#005A9C', c2: '#FFFFFF', cost: 120 },
+        { id: 'b_chc', name: 'Chicago',    cat: 'baseball', type: 'jersey', c1: '#0E3386', c2: '#CC3433', cost: 120 },
+        { id: 'b_sf',  name: 'SF',           cat: 'baseball', type: 'jersey', c1: '#FD5A1E', c2: '#27251F', cost: 120 },
+        { id: 'b_stl', name: 'St. Louis',       cat: 'baseball', type: 'jersey', c1: '#C41E3A', c2: '#FFFFFF', cost: 120 },
+        { id: 'classic', name: 'Default',   cat: 'misc', type: 'solid', c1: '#4CAF50', c2: null, cost: 0 },
+        { id: 'army',    name: 'Army',      cat: 'misc', type: 'camo',  c1: '#4B5320', c2: '#2e3314', cost: 200 },
+        { id: 'navy',    name: 'Navy',      cat: 'misc', type: 'navy_uniform', c1: '#000080', c2: '#FFD700',      cost: 200 },
+        { id: 'chef',    name: 'Chef',      cat: 'misc', type: 'chef',    c1: '#FFFFFF', c2: '#D32F2F',    cost: 250 },
+        { id: 'sloth',   name: 'Sloth',     cat: 'misc', type: 'face',    c1: '#795548', c2: '#D7CCC8', cost: 400 },
+        { id: 'mummy',   name: 'Mummy',     cat: 'misc', type: 'horiz', c1: '#E0E0E0', c2: '#9E9E9E', cost: 400 }
+    ];
+
+    const MODES = {
+        easy: { fireRate: 150, speedMin: 2, speedMax: 3, spawnRate: 1150, coinReward: 2 },
+        medium: { fireRate: 235, speedMin: 3, speedMax: 4, spawnRate: 1000, coinReward: 4 },
+        hard: { fireRate: 380, speedMin: 4, speedMax: 6, spawnRate: 500,  coinReward: 6 },
+        challenge: { fireRate: 235, speedMin: 3, speedMax: 4, spawnRate: 1000, coinReward: 4 }
+    };
+
+    // STATE
+    let gameActive = false, gamePaused = false, score = 0, sessionCoins = 0, currentMode = MODES.medium;
+    let lastShotTime = 0, spawnTimer, isChallengeMode = false, challengeMilestone = 50;
+    const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+    const player = { x: 285, y: 350, w: 30, h: 30 };
+    let bullets = [], enemies = [], particles = [], stars = [];
+
+    // INIT STARFIELD
+    for(let i = 0; i < 100; i++) {
+        stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 2, speed: Math.random() * 2 + 0.5 });
+    }
+
+    updateHUD();
+    window.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; if(e.code === 'Escape') handleEscKey(); });
+    window.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
+
+    function handleEscKey() {
+        if(gameActive) togglePause();
+        else if (!ui.shop.classList.contains('hidden')) {
+            if(ui.shopTitle.innerText === "SHOP CATEGORIES") closeShop();
+            else openShopRoot();
+        }
+    }
+
+    function updateHUD() {
+        ui.score.innerText = "Score: " + score;
+        ui.coins.innerText = "Coins: " + savedData.coins;
+        ui.highscore.innerText = "High Score: " + savedData.highScore;
+    }
+
+    function initGameSequence(mode) {
+        currentMode = { ...MODES[mode] };
+        isChallengeMode = (mode === 'challenge');
+        challengeMilestone = 50; 
+        ui.menu.classList.add('hidden');
+        ui.gameOver.classList.add('hidden');
+        ui.countdown.classList.remove('hidden');
+        player.x = canvas.width/2 - player.w/2;
+        bullets = []; enemies = []; particles = []; score = 0; sessionCoins = 0;
+        updateHUD();
+        let count = 3; ui.countText.innerText = count;
+        let interval = setInterval(() => {
+            count--;
+            if(count > 0) ui.countText.innerText = count;
+            else { clearInterval(interval); ui.countdown.classList.add('hidden'); startGame(); }
+        }, 1000);
+    }
+
+    function startGame() { gameActive = true; gamePaused = false; spawnEnemy(); requestAnimationFrame(update); }
+
+    function togglePause() {
+        gamePaused = !gamePaused;
+        if(gamePaused) { ui.pause.classList.remove('hidden'); clearTimeout(spawnTimer); }
+        else { ui.pause.classList.add('hidden'); spawnEnemy(); requestAnimationFrame(update); }
+    }
+
+    function quitGame() { gameActive = false; gamePaused = false; clearTimeout(spawnTimer); ui.pause.classList.add('hidden'); goToMainMenu(); }
+
+    function goToMainMenu() { ui.gameOver.classList.add('hidden'); ui.shop.classList.add('hidden'); ui.menu.classList.remove('hidden'); updateHUD(); }
+
+    // SHOP SYSTEM
+    function closeShop() { ui.shop.classList.add('hidden'); ui.menu.classList.remove('hidden'); }
+    function openShopRoot() {
+        ui.menu.classList.add('hidden'); ui.shop.classList.remove('hidden');
+        ui.shopCoins.innerText = "Coins: " + savedData.coins;
+        ui.shopTitle.innerText = "SHOP CATEGORIES";
+        ui.shopBackBtn.innerText = "BACK TO MENU";
+        ui.shopBackBtn.onclick = closeShop;
+        ui.shopContent.innerHTML = `
+            <button class="btn-cat" onclick="openShopCategory('basketball')">BASKETBALL</button>
+            <button class="btn-cat" onclick="openShopCategory('soccer')">SOCCER</button>
+            <button class="btn-cat" onclick="openShopCategory('baseball')">BASEBALL</button>
+            <button class="btn-cat" onclick="openShopCategory('misc')">MISC</button>
+        `;
+    }
+
+    function openShopCategory(cat) {
+        ui.shopTitle.innerText = cat.toUpperCase() + " SKINS";
+        ui.shopBackBtn.innerText = "BACK TO CATEGORIES";
+        ui.shopBackBtn.onclick = openShopRoot;
+        const catSkins = SKINS.filter(s => s.cat === cat);
+        ui.shopContent.innerHTML = '<div class="shop-grid" id="gridTarget"></div>';
+        const grid = document.getElementById('gridTarget');
+        catSkins.forEach(skin => {
+            const isOwned = savedData.ownedSkins.includes(skin.id);
+            const isEquipped = savedData.equippedSkin === skin.id;
+            let btnText = isEquipped ? "USED" : (isOwned ? "EQUIP" : "BUY");
+            let btnBg = isEquipped ? "#555" : (isOwned ? "#2196F3" : "#4CAF50");
+            grid.innerHTML += `
+                <div class="skin-card" style="${isEquipped ? 'border:1px solid gold;' : ''}">
+                    <canvas id="prev_${skin.id}" width="30" height="30" class="skin-preview"></canvas>
+                    <div class="skin-name">${skin.name}</div>
+                    <div class="cost-text">${isOwned ? "Owned" : skin.cost}</div>
+                    <button class="btn-buy" style="background:${btnBg};" onclick="${isOwned ? `equipSkin('${skin.id}', '${cat}')` : `buySkin('${skin.id}', ${skin.cost}, '${cat}')`}">${btnText}</button>
+                </div>`;
+        });
+        setTimeout(() => {
+            catSkins.forEach(skin => {
+                const cvs = document.getElementById(`prev_${skin.id}`);
+                if(cvs) drawPlayerEntity(cvs.getContext('2d'), 0, 0, 30, 30, skin);
+            });
+        }, 0);
+    }
+
+    window.buySkin = function(id, cost, cat) {
+        if(savedData.coins >= cost) { savedData.coins -= cost; savedData.ownedSkins.push(id); saveData(); openShopCategory(cat); }
+        else alert("Not enough coins!");
+    };
+    window.equipSkin = function(id, cat) { savedData.equippedSkin = id; saveData(); openShopCategory(cat); };
+
+    // PARTICLES
+    function createExplosion(x, y, color) {
+        for(let i = 0; i < 8; i++) particles.push({ x, y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, size: Math.random()*4+2, life: 1.0, color });
+    }
+
+    function spawnEnemy() {
+        if(!gameActive || gamePaused) return;
+        enemies.push({ x: Math.random() * (canvas.width - 30), y: -30, w: 30, h: 30, speed: Math.random() * (currentMode.speedMax - currentMode.speedMin) + currentMode.speedMin });
+        spawnTimer = setTimeout(spawnEnemy, Math.random() * (currentMode.spawnRate/2) + currentMode.spawnRate);
+    }
+
+    function update() {
+        if(!gameActive || gamePaused) return; 
+        if(keys.ArrowLeft && player.x > 0) player.x -= 6;
+        if(keys.ArrowRight && player.x < canvas.width - player.w) player.x += 6;
+        if(keys.Space) {
+            let now = Date.now();
+            if(now - lastShotTime > currentMode.fireRate) { bullets.push({ x: player.x+12, y: player.y, w: 6, h: 12 }); lastShotTime = now; }
+        }
+        bullets.forEach((b, i) => { b.y -= 10; if(b.y < 0) bullets.splice(i, 1); });
+        particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; if(p.life <= 0) particles.splice(i, 1); });
+        enemies.forEach((en, i) => {
+            en.y += en.speed;
+            if(en.y > canvas.height || rectIntersect(player, en)) { endGame(); return; }
+            bullets.forEach((b, j) => {
+                if(rectIntersect(b, en)) {
+                    createExplosion(en.x+15, en.y+15, "#F44336");
+                    enemies.splice(i, 1); bullets.splice(j, 1);
+                    score += 10; sessionCoins += currentMode.coinReward; savedData.coins += currentMode.coinReward;
+                    if(isChallengeMode && score >= challengeMilestone) {
+                        challengeMilestone += 50; currentMode.speedMin += 0.5; currentMode.speedMax += 0.5;
+                        currentMode.spawnRate = Math.max(300, currentMode.spawnRate - 100);
+                        savedData.coins += 10; sessionCoins += 10;
+                        ui.notify.style.opacity = "1"; setTimeout(() => ui.notify.style.opacity = "0", 1500);
+                    }
+                    updateHUD();
+                }
+            });
+        });
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    function draw() {
+        ctx.fillStyle = "#070d0d"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // DRAW STARS
+        ctx.fillStyle = "white";
+        stars.forEach(s => {
+            ctx.globalAlpha = 0.5;
+            ctx.fillRect(s.x, s.y, s.size, s.size);
+            if(gameActive && !gamePaused) { s.y += s.speed; if(s.y > canvas.height) s.y = 0; }
+        });
+        ctx.globalAlpha = 1.0;
+
+        const skinObj = SKINS.find(s => s.id === savedData.equippedSkin) || SKINS[0];
+        drawPlayerEntity(ctx, player.x, player.y, player.w, player.h, skinObj);
+        ctx.fillStyle = "#FFEB3B"; bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+        particles.forEach(p => { ctx.fillStyle = p.color; ctx.globalAlpha = p.life; ctx.fillRect(p.x, p.y, p.size, p.size); });
+        ctx.globalAlpha = 1.0; ctx.fillStyle = "#F44336"; enemies.forEach(en => ctx.fillRect(en.x, en.y, en.w, en.h));
+    }
+
+    function drawPlayerEntity(c, x, y, w, h, skin) {
+        c.fillStyle = skin.c1; 
+        c.fillRect(x, y, w, h);
+        
+        if (skin.type === 'jersey') {
+            c.fillStyle = skin.c2 || '#fff'; c.fillRect(x + w/3, y, w/3, h);
+            c.fillStyle = skin.c1; c.font = "bold "+(w/3.5)+"px Arial"; c.textAlign = "center";
+            let num = skin.cat==='basketball'?"23":skin.cat==='soccer'?"7":"10";
+            c.fillText(num, x+w/2, y+h-8);
+        } 
+        else if (skin.type === 'camo') {
+            c.fillStyle = skin.c2; c.fillRect(x+2, y+2, 6, 6); c.fillRect(x+18, y+5, 8, 4);
+        } 
+        else if (skin.type === 'face') {
+            c.fillStyle = skin.c2; c.fillRect(x+5, y+6, 20, 14);
+            c.fillStyle = "#000"; c.fillRect(x+8, y+10, 4, 3); c.fillRect(x+18, y+10, 4, 3);
+        }
+        else if (skin.type === 'navy_uniform') {
+            // Gold Epaulets
+            c.fillStyle = skin.c2;
+            c.fillRect(x, y, 8, 4);
+            c.fillRect(x + w - 8, y, 8, 4);
+            // Gold Buttons
+            c.fillRect(x + w/2 - 2, y + 8, 4, 4);
+            c.fillRect(x + w/2 - 2, y + 18, 4, 4);
+        }
+        else if (skin.type === 'chef') {
+            // Red Scarf/Neckerchief
+            c.fillStyle = skin.c2;
+            c.beginPath();
+            c.moveTo(x + 5, y + 12); 
+            c.lineTo(x + w/2, y + 20); 
+            c.lineTo(x + w - 5, y + 12); 
+            c.lineTo(x + w/2, y + 2); 
+            c.fill();
+           
+        }
+        else if (skin.type === 'horiz') { // Mummy
+            c.fillStyle = skin.c2; // Bandage shadow lines
+            for(let i = 4; i < h; i+=5) {
+                c.fillRect(x, y+i, w, 2);
+            }
+            // Spooky eyes
+            c.fillStyle = "#111";
+            c.fillRect(x + 6, y + 8, 6, 4);
+            c.fillRect(x + w - 12, y + 8, 6, 4);
+            c.fillStyle = "#ff0000"; // Red glow
+            c.fillRect(x + 8, y + 9, 2, 2);
+            c.fillRect(x + w - 10, y + 9, 2, 2);
+        }
+    }
+
+    function endGame() {
+        gameActive = false; clearTimeout(spawnTimer);
+        if (score > savedData.highScore) savedData.highScore = score;
+        saveData();
+        ui.gameOver.classList.remove('hidden');
+        document.getElementById('finalScore').innerText = "Score: " + score;
+        document.getElementById('coinsEarned').innerText = "Coins Earned: +" + sessionCoins;
+    }
+
+    function rectIntersect(r1, r2) { return !(r2.x > r1.x + r1.w || r2.x + r2.w < r1.x || r2.y > r1.y + r1.h || r2.y + r2.h < r1.y); }
+    
+    ctx.fillStyle = "#0d0d0d"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+</script>
+</body>
+</html>
+
